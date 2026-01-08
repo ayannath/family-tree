@@ -16,8 +16,10 @@ const AuthPage = ({ onLogin, isDarkMode, setIsDarkMode }) => {
   });
   const [error, setError] = useState('');
   const [resetMessage, setResetMessage] = useState('');
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    setIsVisible(true);
     // Load Facebook SDK
     window.fbAsyncInit = function() {
       window.FB.init({
@@ -43,18 +45,26 @@ const AuthPage = ({ onLogin, isDarkMode, setIsDarkMode }) => {
       justifyContent: 'center',
       alignItems: 'center',
       minHeight: '100vh',
-      backgroundColor: isDarkMode ? '#121212' : '#f3f4f6',
+      // To use a local image: import bgImage from './assets/background.jpg' and use `url(${bgImage})`
+      backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url('https://images.unsplash.com/photo-1511895426328-dc8714191300?q=80&w=2070&auto=format&fit=crop')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundAttachment: 'fixed',
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      transition: 'background-color 0.3s ease',
     },
     card: {
       width: '100%',
       maxWidth: '420px',
       padding: '40px',
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
-      borderRadius: '16px',
-      boxShadow: isDarkMode ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 25px 50px -12px rgba(0, 0, 0, 0.1)',
+      backgroundColor: isDarkMode ? 'rgba(30, 30, 30, 0.85)' : 'rgba(255, 255, 255, 0.9)',
+      backdropFilter: 'blur(12px)',
+      borderRadius: '24px',
+      boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+      border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(255, 255, 255, 0.5)',
       textAlign: 'center',
+      opacity: isVisible ? 1 : 0,
+      transform: isVisible ? 'translateY(0)' : 'translateY(20px)',
+      transition: 'opacity 0.8s ease-out, transform 0.8s ease-out',
     },
     header: {
       marginBottom: '32px',
@@ -74,13 +84,13 @@ const AuthPage = ({ onLogin, isDarkMode, setIsDarkMode }) => {
       padding: '12px 16px',
       marginBottom: '16px',
       borderRadius: '8px',
-      border: isDarkMode ? '1px solid #374151' : '1px solid #d1d5db',
-      backgroundColor: isDarkMode ? '#374151' : '#ffffff',
+      border: isDarkMode ? '1px solid #444' : '1px solid #e0e0e0',
+      backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.8)',
       color: isDarkMode ? '#ffffff' : '#111827',
       fontSize: '15px',
       outline: 'none',
       boxSizing: 'border-box',
-      transition: 'border-color 0.2s',
+      transition: 'all 0.2s',
     },
     button: {
       width: '100%',
@@ -291,7 +301,7 @@ const AuthPage = ({ onLogin, isDarkMode, setIsDarkMode }) => {
       <div style={styles.card}>
         <div style={styles.header}>
           <h2 style={styles.title}>
-            {isForgotPassword ? 'Reset Password' : (isLogin ? 'Welcome Back' : 'Create Account')}
+            {isForgotPassword ? 'Reset Password' : (isLogin ? 'Amar Paribar' : 'Create Account')}
           </h2>
           <p style={styles.subtitle}>
             {isForgotPassword ? 'Enter your details to reset' : (isLogin ? 'Enter your credentials to access your account' : 'Start building your family tree today')}
