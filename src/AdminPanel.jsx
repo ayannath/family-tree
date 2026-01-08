@@ -108,8 +108,6 @@ const AdminPanel = ({
     setEditingId
   });
 
-  const [fbId, setFbId] = useState('');
-  const [fbToken, setFbToken] = useState(() => localStorage.getItem('fbToken') || '');
   const selectedNode = familyData.find(n => n.id === selectedNodeId);
   const referenceNode = familyData.find(n => n.id === selectedParent);
 
@@ -280,57 +278,6 @@ const AdminPanel = ({
     return <input key={field.id} type={field.type} placeholder={field.placeholder} value={value} onChange={e => set(e.target.value)} style={style} />;
   };
 
-  useEffect(() => {
-    localStorage.setItem('fbToken', fbToken);
-  }, [fbToken]);
-
-  const handleFbFetch = async () => {
-    if (!fbId || !fbToken) {
-      alert("Please provide both Facebook User ID and Access Token.");
-      return;
-    }
-    try {
-      // Fetch basic fields and profile picture
-      const response = await fetch(`https://graph.facebook.com/${fbId}?fields=name,gender,birthday,picture.type(large)&access_token=${fbToken}`);
-      const data = await response.json();
-
-      if (data.error) throw new Error(data.error.message);
-
-      if (data.name) setName(data.name);
-      if (data.gender) setGender(data.gender === 'male' ? 'male' : data.gender === 'female' ? 'female' : 'other');
-      if (data.birthday) {
-        // FB format is MM/DD/YYYY, convert to YYYY-MM-DD
-        const parts = data.birthday.split('/');
-        if (parts.length === 3) setBirthDate(`${parts[2]}-${parts[0]}-${parts[1]}`);
-      }
-      if (data.picture && data.picture.data && data.picture.data.url) {
-        // Fetch the image blob to simulate a file upload
-        const imgRes = await fetch(data.picture.data.url);
-        const blob = await imgRes.blob();
-        const file = new File([blob], "fb-profile.jpg", { type: "image/jpeg" });
-        handlePictureUpload({ target: { files: [file] } });
-      }
-    } catch (error) {
-      alert("Error fetching Facebook data: " + error.message);
-    }
-  };
-
-  const handleValidateToken = async () => {
-    if (!fbToken) {
-      alert("Please enter an Access Token.");
-      return;
-    }
-    try {
-      const response = await fetch(`https://graph.facebook.com/me?access_token=${fbToken}`);
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
-      alert(`Token is valid for user: ${data.name} (ID: ${data.id})`);
-      if (!fbId) setFbId(data.id);
-    } catch (error) {
-      alert("Token validation failed: " + error.message);
-    }
-  };
-
   return (
     <div style={{ 
       position: 'absolute', 
@@ -351,17 +298,6 @@ const AdminPanel = ({
       <div style={{ marginBottom: '20px' }}>
         <h4 style={{ marginTop: 0 }}>{editingId ? 'Edit Member' : 'Add Member'}</h4>
         <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {!editingId && (
-              <div style={{ padding: '10px', border: isDarkMode ? '1px solid #444' : '1px solid #eee', borderRadius: '4px', marginBottom: '10px' }}>
-                <div style={{ fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>Autofill from Facebook</div>
-                <input type="text" placeholder="Facebook User ID" value={fbId} onChange={e => setFbId(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '5px', boxSizing: 'border-box', fontSize: '12px' }} />
-                <div style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
-                  <input type="text" placeholder="Access Token" value={fbToken} onChange={e => setFbToken(e.target.value)} style={{ flex: 1, padding: '5px', boxSizing: 'border-box', fontSize: '12px' }} />
-                  <button onClick={handleValidateToken} style={{ padding: '5px', background: '#673AB7', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '12px' }}>Validate</button>
-                </div>
-                <button onClick={handleFbFetch} style={{ width: '100%', padding: '5px', background: '#1877F2', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '12px' }}>Fetch Details</button>
-              </div>
-            )}
             {formConfig.map(field => renderInput(field))}
             
             <div style={{ display: 'flex', gap: '10px' }}>

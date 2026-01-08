@@ -5,7 +5,11 @@ const SearchOverlay = ({
   isDarkMode,
   filterType, setFilterType,
   selectedNodeId, targetNodeId,
-  handleFocusPath
+  handleFocusPath,
+  roots,
+  currentRootId,
+  onSelectRoot,
+  familyTitles
 }) => {
   return (
     <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 100, width: '300px', display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
@@ -27,6 +31,22 @@ const SearchOverlay = ({
             <option value="descendants">Show Direct Descendants</option>
           </select>
         </div>
+        {roots && roots.length > 0 && (
+          <div style={{ marginTop: '5px' }}>
+            <select
+              value={currentRootId || ''}
+              onChange={e => onSelectRoot(e.target.value ? Number(e.target.value) : null)}
+              style={{ padding: '8px', width: '100%', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black' }}
+            >
+              <option value="">Show All Trees</option>
+              {roots.map(root => (
+                <option key={root.id} value={root.id}>
+                  {familyTitles && familyTitles[root.id] ? familyTitles[root.id] : `${root.name}'s Family Tree`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {filterType === 'descendants' && !selectedNodeId && (
           <div style={{ padding: '8px', background: '#ff9800', color: 'white', borderRadius: '4px', fontSize: '14px', marginTop: '5px' }}>
             Select a node to view descendants

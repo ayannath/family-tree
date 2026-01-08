@@ -19,7 +19,9 @@ function App() {
   });
 
   const [isAdmin, setIsAdmin] = useState(false);
-  const [selectedParent, setSelectedParent] = useState('');
+  const [selectedParent, setSelectedParent] = useState(() => {
+    return familyData && familyData.length > 0 ? familyData[0].id : '';
+  });
   const [editingId, setEditingId] = useState(null);
   const [viewState, setViewState] = useState({ scale: 1, x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -32,16 +34,11 @@ function App() {
   const [redoStack, setRedoStack] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem('darkMode') === 'true';
+    return localStorage.getItem('darkMode') !== 'false';
   });
   const [filterType, setFilterType] = useState('all');
   const [selectedNodeId, setSelectedNodeId] = useState(() => {
-    const saved = localStorage.getItem('selectedNodeId');
-    if (saved) return Number(saved);
-
-    const savedData = localStorage.getItem('familyTreeData');
-    const data = savedData ? JSON.parse(savedData) : initialFamilyData;
-    return data && data.length > 0 ? data[0].id : null;
+    return familyData && familyData.length > 0 ? familyData[0].id : null;
   });
   const [familyTitles, setFamilyTitles] = useState(() => {
     const saved = localStorage.getItem('familyTitles');
@@ -133,7 +130,7 @@ function App() {
   }, []);
 
   // Convert flat list to tree structure
-  const treeData = useMemo(() => {
+  const fullTreeData = useMemo(() => {
     const dataMap = {};
     const tree = [];
 
@@ -190,6 +187,12 @@ function App() {
       }
     });
 
+    return { roots: tree, dataMap, secondaryIds };
+  }, [familyData]);
+
+  const treeData = useMemo(() => {
+    const { roots: tree, dataMap, secondaryIds } = fullTreeData;
+
     if (filterType === 'descendants' && selectedNodeId && dataMap[selectedNodeId]) {
       return [dataMap[selectedNodeId]];
     }
@@ -219,7 +222,26 @@ function App() {
     }
 
     return tree;
-  }, [familyData, filterType, selectedNodeId]);
+  }, [fullTreeData, filterType, selectedNodeId]);
+
+  const currentRootId = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const { dataMap, secondaryIds } = fullTreeData;
+    
+    if (secondaryIds.has(selectedNodeId)) {
+      const node = dataMap[selectedNodeId];
+      if (node && !node.parentId && node.partnerId) {
+        return node.partnerId; // Return partner as root if secondary is root-like
+      }
+    }
+
+    let current = dataMap[selectedNodeId];
+    if (!current) return null;
+    while (current.parentId && dataMap[current.parentId]) {
+      current = dataMap[current.parentId];
+    }
+    return current.id;
+  }, [selectedNodeId, fullTreeData]);
 
   const upcomingDates = useMemo(() => {
     const today = new Date();
@@ -512,21 +534,45 @@ function App() {
   };
 
   const handleDeleteMember = (id) => {
-    // Helper to find all descendant IDs to cascade delete
-    const getDescendants = (parentId) => {
-      let descendants = [];
-      familyData.forEach(item => {
-        if (item.parentId === parentId) {
-          descendants.push(item.id);
-          descendants = [...descendants, ...getDescendants(item.id)];
-        }
-      });
-      return descendants;
-    };
-
     addToHistory();
-    const idsToDelete = [id, ...getDescendants(id)];
-    setFamilyData(familyData.filter(item => !idsToDelete.includes(item.id)));
+    
+    const nodeToDelete = familyData.find(n => n.id === id);
+    if (!nodeToDelete) return;
+
+    // 1. Remove the node
+    let updatedData = familyData.filter(item => item.id !== id);
+
+    // 2. Handle children and partner
+    const partnerId = nodeToDelete.partnerId;
+    
+    updatedData = updatedData.map(item => {
+      // If this item was a child of the deleted node
+      if (item.parentId === id) {
+        return { ...item, parentId: partnerId || null };
+      }
+      // If this item was the partner of the deleted node
+      if (item.id === partnerId) {
+        return { ...item, partnerId: null };
+      }
+      return item;
+    });
+
+    // 3. Update selection if the deleted node was selected
+    if (selectedNodeId === id) {
+      if (nodeToDelete.parentId) {
+        setSelectedNodeId(nodeToDelete.parentId);
+        setSelectedParent(nodeToDelete.parentId);
+      } else if (partnerId) {
+        setSelectedNodeId(partnerId);
+        setSelectedParent(partnerId);
+      } else {
+        setSelectedNodeId(null);
+        setSelectedParent('');
+      }
+      setEditingId(null);
+    }
+
+    setFamilyData(updatedData);
   };
 
   const startEditing = (member) => {
@@ -667,7 +713,8 @@ function App() {
   };
 
   const handleResetData = () => {
-    if (window.confirm('Are you sure you want to reset the tree to default?')) {
+    const confirmationMessage = "WARNING: This will delete all your current family tree data and reset it to the default state. All your work will be lost.\n\nIt is highly recommended to export your data to a JSON file before proceeding.\n\nAre you sure you want to continue?";
+    if (window.confirm(confirmationMessage)) {
       addToHistory();
       setFamilyData(initialFamilyData);
     }
