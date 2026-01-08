@@ -1,5 +1,4 @@
-import { useMemo } from 'react';
-import { calculateAge } from './helpers';
+import { useMemo, useState } from 'react';
 
 const calculateLifeDuration = (birthDate, deathDate) => {
   if (!birthDate) return '';
@@ -14,26 +13,67 @@ const calculateLifeDuration = (birthDate, deathDate) => {
 };
 
 // Component to display family members in a chronological timeline based on birth date
-const TimelineView = ({ familyData, isDarkMode }) => {
-  // Sort family members by birth date, filtering out those without one
-  const sortedData = useMemo(() => {
-    return [...familyData]
-      .filter(m => m.birthDate)
-      .sort((a, b) => new Date(a.birthDate) - new Date(b.birthDate));
-  }, [familyData]);
+const TimelineView = ({ familyData, isDarkMode, secondaryIds }) => {
+  const [sortOrder, setSortOrder] = useState('asc');
 
-  // Render a message if no birth dates are available
+  // Sort family members by birth date based on sortOrder
+  const sortedData = useMemo(() => {
+    const withDate = familyData.filter(f => f.birthDate);
+    const withoutDate = familyData.filter(f => !f.birthDate);
+
+    withDate.sort((a, b) => {
+      const dateA = new Date(a.birthDate);
+      const dateB = new Date(b.birthDate);
+      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+    });
+
+    return [...withDate, ...withoutDate];
+  }, [familyData, sortOrder]);
+
+  // Render a message if no family data is available
   if (sortedData.length === 0) {
     return (
       <div style={{ padding: '40px', textAlign: 'center', color: isDarkMode ? '#ccc' : '#666' }}>
-        <h3>No birth dates recorded</h3>
-        <p>Add birth dates to family members in the Admin Panel to see the timeline.</p>
+        <h3>No family members found</h3>
+        <p>Add family members in the Admin Panel to see the timeline.</p>
       </div>
     );
   }
 
   // Main timeline render
   return (
+    <div>
+      <div style={{ 
+        padding: '10px', 
+        textAlign: 'center', 
+        position: 'sticky', 
+        top: 0, 
+        zIndex: 10, 
+        backgroundColor: isDarkMode ? '#121212' : '#f8f9fa',
+        borderBottom: isDarkMode ? '1px solid #333' : '1px solid #ddd'
+      }}>
+        <button 
+          onClick={() => setSortOrder('asc')}
+          style={{
+            padding: '6px 12px',
+            marginRight: '10px',
+            cursor: 'pointer',
+            backgroundColor: sortOrder === 'asc' ? '#2196F3' : 'transparent',
+            color: sortOrder === 'asc' ? 'white' : (isDarkMode ? '#eee' : 'black'),
+            border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
+            borderRadius: '4px'
+          }}>Oldest First (ASC)</button>
+        <button 
+          onClick={() => setSortOrder('desc')}
+          style={{
+            padding: '6px 12px',
+            cursor: 'pointer',
+            backgroundColor: sortOrder === 'desc' ? '#2196F3' : 'transparent',
+            color: sortOrder === 'desc' ? 'white' : (isDarkMode ? '#eee' : 'black'),
+            border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
+            borderRadius: '4px'
+          }}>Newest First (DESC)</button>
+      </div>
     <div className="timeline-container">
       {/* Central vertical line */}
       <div className="timeline-line"></div>
@@ -42,10 +82,12 @@ const TimelineView = ({ familyData, isDarkMode }) => {
       {sortedData.map((member, index) => (
         <div key={member.id} className="timeline-item">
           {/* Birth date marker on the timeline */}
-          <div className="timeline-year">{member.birthDate}</div>
+          <div className="timeline-year">{member.birthDate || 'Unknown'}</div>
           
           {/* Content card for the family member */}
-          <div className="timeline-content">
+          <div className="timeline-content" style={{
+            border: secondaryIds && secondaryIds.has(member.id) ? (isDarkMode ? '2px dashed #777' : '2px dashed #888') : undefined
+          }}>
             {/* Profile picture if available */}
             {member.profilePicture && (
                <img 
@@ -76,6 +118,7 @@ const TimelineView = ({ familyData, isDarkMode }) => {
           </div>
         </div>
       ))}
+    </div>
     </div>
   );
 };

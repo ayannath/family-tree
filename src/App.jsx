@@ -7,9 +7,9 @@ import RadialTreeView from './RadialTreeView'
 import AdminPanel from './AdminPanel'
 import ContextMenu from './ContextMenu'
 import { initialFamilyData } from './initialData'
-import Header from './Header'
 import SearchOverlay from './SearchOverlay'
-import ZoomControls from './ZoomControls'
+import AuthPage from './AuthPage'
+import ProfilePage from './ProfilePage'
 
 function App() {
   // Initial flat data for the family tree
@@ -36,6 +36,12 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') !== 'false';
   });
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('currentUser');
+    if (saved) return JSON.parse(saved);
+    const sessionSaved = sessionStorage.getItem('currentUser');
+    return sessionSaved ? JSON.parse(sessionSaved) : null;
+  });
   const [filterType, setFilterType] = useState('all');
   const [selectedNodeId, setSelectedNodeId] = useState(() => {
     return familyData && familyData.length > 0 ? familyData[0].id : null;
@@ -48,8 +54,9 @@ function App() {
   const [expandAction, setExpandAction] = useState(null);
   const [layout, setLayout] = useState('horizontal');
   const [viewMode, setViewMode] = useState('tree'); // 'tree' or 'timeline'
-  const [pendingAction, setPendingAction] = useState(null); // { type: 'add_parent', targetId: number }
   const [isAllExpanded, setIsAllExpanded] = useState(true);
+  const [showProfile, setShowProfile] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const addToHistory = useCallback(() => {
     setHistory(prev => [...prev, familyData]);
@@ -97,9 +104,22 @@ function App() {
   }, [searchTerm]);
 
   useEffect(() => {
-    const handleClick = () => setContextMenu(null);
+    const handleClick = () => {
+      setContextMenu(null);
+      setIsMenuOpen(false);
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsMenuOpen(false);
+        setContextMenu(null);
+      }
+    };
     window.addEventListener('click', handleClick);
-    return () => window.removeEventListener('click', handleClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', handleClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const handleNodeContextMenu = (e, node) => {
@@ -165,7 +185,16 @@ function App() {
       }
     });
 
-    // 4. Handle partners and build tree roots
+    // 4. Link partners (Bidirectional)
+    familyData.forEach(item => {
+      if (item.partnerId) {
+        const node = dataMap[item.id];
+        const partnerNode = dataMap[item.partnerId];
+        if (partnerNode) node.partner = partnerNode;
+      }
+    });
+
+    // 5. Handle secondary nodes (merge children) and build tree roots
     familyData.forEach(item => {
       if (secondaryIds.has(item.id)) return;
 
@@ -173,10 +202,7 @@ function App() {
       
       if (item.partnerId) {
         const partnerNode = dataMap[item.partnerId];
-        // Always link partner for bidirectional navigation/display
-        if (partnerNode) node.partner = partnerNode;
-
-        if (secondaryIds.has(item.partnerId)) {
+        if (partnerNode && secondaryIds.has(item.partnerId)) {
            // Move partner's children to this node to ensure they appear under the couple
            node.children.push(...partnerNode.children);
         }
@@ -223,6 +249,18 @@ function App() {
 
     return tree;
   }, [fullTreeData, filterType, selectedNodeId]);
+
+  const timelineData = useMemo(() => {
+    const visibleIds = new Set();
+    const traverse = (node) => {
+      if (!node || visibleIds.has(node.id)) return;
+      visibleIds.add(node.id);
+      if (node.partner) visibleIds.add(node.partner.id);
+      if (node.children) node.children.forEach(traverse);
+    };
+    treeData.forEach(traverse);
+    return familyData.filter(n => visibleIds.has(n.id));
+  }, [treeData, familyData]);
 
   const currentRootId = useMemo(() => {
     if (!selectedNodeId) return null;
@@ -408,6 +446,8 @@ function App() {
     return ids;
   }, [searchTerm, familyData]);
 
+  const searchResults = useMemo(() => familyData.filter(n => highlightedIds.has(n.id)), [familyData, highlightedIds]);
+
   const handleAddMember = (memberData) => {
     if (!memberData.name.trim()) return;
     addToHistory();
@@ -449,85 +489,6 @@ function App() {
             m.id === partnerId ? { ...m, anniversaryDate: newMember.anniversaryDate } : m
           );
         }
-    }
-
-    // Handle pending actions (e.g., adding a parent)
-    if (pendingAction && pendingAction.type === 'add_parent') {
-      const targetNodeIndex = updatedData.findIndex(n => n.id === pendingAction.targetId);
-      if (targetNodeIndex !== -1) {
-        const targetNode = { ...updatedData[targetNodeIndex] };
-        if (!targetNode.parentId) {
-          // If target has no parent, set new member as parent
-          targetNode.parentId = newMember.id;
-          updatedData[targetNodeIndex] = targetNode;
-        } else {
-          // If target already has a parent, link new member as partner to existing parent
-          const existingParentIndex = updatedData.findIndex(n => n.id === targetNode.parentId);
-          if (existingParentIndex !== -1) {
-            const existingParent = { ...updatedData[existingParentIndex] };
-            
-            if (existingParent.partnerId) {
-              const oldPartnerIndex = updatedData.findIndex(n => n.id === existingParent.partnerId);
-              if (oldPartnerIndex !== -1) {
-                updatedData[oldPartnerIndex] = { ...updatedData[oldPartnerIndex], partnerId: null };
-              }
-            }
-            
-            existingParent.partnerId = newMember.id;
-            updatedData[existingParentIndex] = existingParent;
-            // Update newMember partnerId as well (it is the last element)
-            updatedData[updatedData.length - 1] = { ...newMember, partnerId: existingParent.id };
-          }
-        }
-      }
-    }
-
-    setFamilyData(updatedData);
-    setPendingAction(null);
-  };
-
-  const handleAddParent = (childId, parentData) => {
-    const child = familyData.find(n => n.id === childId);
-    if (!child) return;
-
-    addToHistory();
-    
-    const newParent = {
-      id: Date.now(),
-      name: parentData.name,
-      gender: parentData.gender,
-      notes: parentData.notes || '',
-      birthDate: parentData.birthDate || null,
-      profilePicture: parentData.profilePicture || null,
-      facebookUrl: parentData.facebookUrl || null,
-      parentId: null,
-      partnerId: null
-    };
-
-    let updatedData = [...familyData, newParent];
-    const childIndex = updatedData.findIndex(n => n.id === childId);
-    const updatedChild = { ...updatedData[childIndex] };
-
-    if (!updatedChild.parentId) {
-      updatedChild.parentId = newParent.id;
-      updatedData[childIndex] = updatedChild;
-    } else {
-      const existingParentIndex = updatedData.findIndex(n => n.id === updatedChild.parentId);
-      if (existingParentIndex !== -1) {
-        const existingParent = { ...updatedData[existingParentIndex] };
-        
-        if (existingParent.partnerId) {
-          const oldPartnerIndex = updatedData.findIndex(n => n.id === existingParent.partnerId);
-          if (oldPartnerIndex !== -1) {
-            updatedData[oldPartnerIndex] = { ...updatedData[oldPartnerIndex], partnerId: null };
-          }
-        }
-        
-        existingParent.partnerId = newParent.id;
-        newParent.partnerId = existingParent.id;
-        updatedData[existingParentIndex] = existingParent;
-        updatedData[updatedData.length - 1] = newParent;
-      }
     }
 
     setFamilyData(updatedData);
@@ -743,7 +704,6 @@ function App() {
     setContextMenu(null);
     setSelectedParent(node.id);
     setEditingId(null);
-    setPendingAction(null);
   };
 
   const handleTitleClick = () => {
@@ -787,36 +747,179 @@ function App() {
     setExpandAction({ type: newExpandedState ? 'expandAll' : 'collapseAll', id: Date.now() });
   };
 
+  const handleLogin = (user, rememberMe) => {
+    setCurrentUser(user);
+    if (rememberMe) {
+      localStorage.setItem('currentUser', JSON.stringify(user));
+    } else {
+      sessionStorage.setItem('currentUser', JSON.stringify(user));
+    }
+  };
+
+  const handleUpdateUser = (updatedUser) => {
+    setCurrentUser(updatedUser);
+    if (localStorage.getItem('currentUser')) {
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+    }
+    if (sessionStorage.getItem('currentUser')) {
+      sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('currentUser');
+    sessionStorage.removeItem('currentUser');
+    setIsAdmin(false);
+    setShowProfile(false);
+  };
+
+  if (!currentUser) {
+    return <AuthPage onLogin={handleLogin} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />;
+  }
+
   return (
     <div className={`app-container ${isDarkMode ? 'dark-mode' : ''}`} style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'sans-serif', textAlign: 'left', backgroundColor: isDarkMode ? '#121212' : 'white', color: isDarkMode ? '#eee' : 'black' }}>
-      <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isDarkMode ? '1px solid #333' : '1px solid #eee', backgroundColor: isDarkMode ? '#1e1e1e' : '#fff', zIndex: 10 }}>
+      <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isDarkMode ? '1px solid #333' : '1px solid #eee', backgroundColor: isDarkMode ? '#1e1e1e' : '#fff', zIndex: 300, position: 'relative' }}>
         <h1 style={{ margin: 0, fontSize: '1.5rem', cursor: 'pointer' }} onClick={handleTitleClick} title="Click to rename">
           {treeData.length === 1 ? (familyTitles[treeData[0].id] || `${treeData[0].name} Family Tree`) : (familyTitles['global'] || 'Family Tree Project')}
           <span style={{ fontSize: '0.8rem', marginLeft: '10px', opacity: 0.5 }}>✎</span>
         </h1>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => setViewMode(v => v === 'tree' ? 'timeline' : 'tree')} style={{ padding: '8px 16px', cursor: 'pointer', background: 'transparent', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px' }}>{viewMode === 'tree' ? '📅 Timeline' : '🌳 Tree'}</button>
-          <button onClick={() => setLayout(l => l === 'horizontal' ? 'vertical' : l === 'vertical' ? 'radial' : 'horizontal')} style={{ padding: '8px 16px', cursor: 'pointer', background: 'transparent', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px' }}>{layout === 'horizontal' ? '↕ Vertical' : layout === 'vertical' ? '◎ Radial' : '↔ Horizontal'}</button>
-          <button onClick={() => setIsDarkMode(!isDarkMode)} style={{ padding: '8px 16px', cursor: 'pointer', background: 'transparent', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px' }}>{isDarkMode ? '☀️ Light' : '🌙 Dark'}</button>
-          <button onClick={handleUndo} disabled={history.length === 0} style={{ padding: '8px 16px', cursor: history.length === 0 ? 'not-allowed' : 'pointer', opacity: history.length === 0 ? 0.5 : 1 }}>Undo</button>
-          <button onClick={handleRedo} disabled={redoStack.length === 0} style={{ padding: '8px 16px', cursor: redoStack.length === 0 ? 'not-allowed' : 'pointer', opacity: redoStack.length === 0 ? 0.5 : 1 }}>Redo</button>
-          <button onClick={() => setIsAdmin(!isAdmin)} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-            {isAdmin ? 'Close Admin' : 'Open Admin Panel'}
-          </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ position: 'relative', marginRight: '10px' }}>
+            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Search family..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{
+                padding: '8px 8px 8px 30px',
+                borderRadius: '4px',
+                border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
+                backgroundColor: isDarkMode ? '#2d2d2d' : '#f0f2f5',
+                color: isDarkMode ? '#eee' : 'black',
+                outline: 'none',
+                width: '200px'
+              }}
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: isDarkMode ? '#aaa' : '#666', cursor: 'pointer' }}
+              >✕</button>
+            )}
+          </div>
+
+          <div style={{ position: 'relative' }}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }} 
+              style={{ padding: '8px 16px', cursor: 'pointer', background: 'transparent', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              <span>☰</span> Menu
+            </button>
+            
+            {isMenuOpen && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '5px',
+                backgroundColor: isDarkMode ? '#2d2d2d' : 'white',
+                border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
+                borderRadius: '4px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                padding: '10px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '5px',
+                minWidth: '220px',
+                zIndex: 1000
+              }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ padding: '8px', borderBottom: isDarkMode ? '1px solid #444' : '1px solid #eee', marginBottom: '5px', fontSize: '14px', color: isDarkMode ? '#eee' : 'black' }}>
+                  Signed in as <strong>{currentUser.name}</strong>
+                </div>
+                
+                <button onClick={() => { setShowProfile(true); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>👤 Profile</button>
+                <button onClick={() => { setViewMode(v => v === 'tree' ? 'timeline' : 'tree'); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>{viewMode === 'tree' ? '📅 Timeline View' : '🌳 Tree View'}</button>
+                <button onClick={() => { setLayout(l => l === 'horizontal' ? 'vertical' : l === 'vertical' ? 'radial' : 'horizontal'); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>{layout === 'horizontal' ? '↕ Vertical Layout' : layout === 'vertical' ? '◎ Radial Layout' : '↔ Horizontal Layout'}</button>
+                <button onClick={() => { setIsDarkMode(!isDarkMode); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>{isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
+                <button onClick={() => { setIsAdmin(!isAdmin); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>{isAdmin ? '🔒 Close Admin' : '🔓 Open Admin'}</button>
+                
+                <div style={{ borderTop: isDarkMode ? '1px solid #444' : '1px solid #eee', margin: '5px 0' }}></div>
+                <button onClick={handleLogout} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>🚪 Logout</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
+      {searchTerm && (
+        <div style={{
+          position: 'fixed',
+          top: '60px',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 290,
+          overflowY: 'auto',
+          padding: '20px'
+        }} onClick={() => setSearchTerm('')}>
+          <div style={{ maxWidth: '600px', margin: '0 auto' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ color: isDarkMode ? '#eee' : '#333', textAlign: 'center' }}>Search Results ({searchResults.length})</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {searchResults.length > 0 ? searchResults.map(node => (
+                <div 
+                  key={node.id}
+                  onClick={() => { handleNodeSelect(node.id); setSearchTerm(''); }}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: isDarkMode ? '#2d2d2d' : 'white',
+                    borderRadius: '8px',
+                    border: isDarkMode ? '1px solid #444' : '1px solid #ddd',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '15px',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  {node.profilePicture ? (
+                    <img src={node.profilePicture} alt={node.name} style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: isDarkMode ? '#444' : '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>{node.gender === 'female' ? '👩' : '👨'}</div>
+                  )}
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '1.1em', color: isDarkMode ? '#eee' : '#333' }}>{node.name} {node.deathDate && '🪦'}</div>
+                    <div style={{ fontSize: '0.9em', color: isDarkMode ? '#aaa' : '#666' }}>
+                      {node.birthDate ? `Born: ${node.birthDate}` : 'No birth date'} 
+                      {node.parentId ? '' : ' (Root Member)'}
+                    </div>
+                  </div>
+                </div>
+              )) : (
+                <div style={{ textAlign: 'center', padding: '20px', color: isDarkMode ? '#aaa' : '#666' }}>No members found matching "{searchTerm}"</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {showProfile ? (
+          <ProfilePage 
+            currentUser={currentUser} 
+            onUpdateUser={handleUpdateUser} 
+            onBack={() => setShowProfile(false)} 
+            isDarkMode={isDarkMode} 
+          />
+        ) : (
+        <>
         {viewMode === 'tree' && (
         <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 100, width: '300px', display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
           <div style={{ pointerEvents: 'auto' }}>
-          <input
-              type="text"
-              placeholder="Search for a member..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              style={{ padding: '10px', width: '100%', boxSizing: 'border-box', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black' }}
-          />
           <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
             <select 
               value={filterType} 
@@ -840,9 +943,48 @@ function App() {
           {selectedNodeId && (
             <div style={{ marginTop: '5px', display: 'flex', gap: '5px' }}>
               <button onClick={toggleExpandAll} style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>{isAllExpanded ? 'Collapse All' : 'Expand All'}</button>
-              <button onClick={handleClearSelection} style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Clear Selection</button>
+              <button onClick={handleClearSelection} style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Own Family</button>
             </div>
           )}
+          <div style={{ marginTop: '5px', display: 'flex', gap: '5px' }}>
+            <button 
+              onClick={handleUndo} 
+              disabled={history.length === 0} 
+              title="Undo"
+              style={{ flex: 1, padding: '6px', cursor: history.length === 0 ? 'not-allowed' : 'pointer', opacity: history.length === 0 ? 0.5 : 1, borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+            >
+              ↺
+            </button>
+            <button 
+              onClick={handleRedo} 
+              disabled={redoStack.length === 0} 
+              title="Redo"
+              style={{ flex: 1, padding: '6px', cursor: redoStack.length === 0 ? 'not-allowed' : 'pointer', opacity: redoStack.length === 0 ? 0.5 : 1, borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+            >
+              ↻
+            </button>
+            <button 
+              onClick={() => setViewState(s => ({ ...s, scale: s.scale + 0.1 }))} 
+              title="Zoom In"
+              style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+            >
+              +
+            </button>
+            <button 
+              onClick={() => setViewState(s => ({ ...s, scale: s.scale - 0.1 }))} 
+              title="Zoom Out"
+              style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+            >
+              -
+            </button>
+            <button 
+              onClick={() => setViewState({ scale: 1, x: 0, y: 0 })} 
+              title="Reset View"
+              style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+            >
+              ⌖
+            </button>
+          </div>
           </div>
         </div>
         )}
@@ -864,7 +1006,6 @@ function App() {
             onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
           >
-            <ZoomControls setViewState={setViewState} isDarkMode={isDarkMode} />
             <Minimap treeData={treeData} viewState={viewState} containerRef={containerRef} contentRef={contentRef} isDarkMode={isDarkMode} layout={layout} />
             <div className={`tree ${layout === 'vertical' ? 'vertical' : ''}`} ref={contentRef} style={layout === 'radial' ? {
               transform: `translate(${viewState.x}px, ${viewState.y}px) scale(${viewState.scale})`,
@@ -881,8 +1022,8 @@ function App() {
           </div>
         </div>
         ) : (
-          <div style={{ width: '100%', height: '100%', overflowY: 'auto', backgroundColor: isDarkMode ? '#121212' : '#f8f9fa' }}>
-            <TimelineView familyData={familyData} isDarkMode={isDarkMode} />
+          <div style={{ width: '100%', height: '100%', overflow: 'auto', backgroundColor: isDarkMode ? '#121212' : '#f8f9fa' }}>
+            <TimelineView familyData={timelineData} isDarkMode={isDarkMode} secondaryIds={fullTreeData.secondaryIds} />
           </div>
         )}
 
@@ -903,7 +1044,6 @@ function App() {
             startEditing={startEditing}
             handleDeleteMember={handleDeleteMember}
             selectedNodeId={selectedNodeId}
-            handleAddParent={handleAddParent}
           />
         )}
 
@@ -912,6 +1052,8 @@ function App() {
           handleContextAdd={handleContextAdd} 
           handleDeleteMember={handleDeleteMember} 
         />
+        </>
+        )}
       </div>
     </div>
   )

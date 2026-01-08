@@ -1,7 +1,6 @@
 import React from 'react';
 
 const SearchOverlay = ({
-  searchTerm, setSearchTerm,
   isDarkMode,
   filterType, setFilterType,
   selectedNodeId, targetNodeId,
@@ -14,14 +13,7 @@ const SearchOverlay = ({
   return (
     <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 100, width: '300px', display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
       <div style={{ pointerEvents: 'auto' }}>
-        <input
-          type="text"
-          placeholder="Search for a member..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          style={{ padding: '10px', width: '100%', boxSizing: 'border-box', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black' }}
-        />
-        <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginTop: '5px' }}>
+        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
           <select
             value={filterType}
             onChange={e => setFilterType(e.target.value)}

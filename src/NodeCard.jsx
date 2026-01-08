@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import { calculateAge } from './helpers';
 
 const calculateLifeDuration = (birthDate, deathDate) => {
   if (!birthDate) return '';

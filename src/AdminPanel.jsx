@@ -17,8 +17,7 @@ const AdminPanel = ({
   setEditingId,
   startEditing,
   handleDeleteMember,
-  selectedNodeId,
-  handleAddParent
+  selectedNodeId
 }) => {
   const [deathDate, setDeathDate] = useState('');
   const [anniversaryDate, setAnniversaryDate] = useState('');
@@ -89,12 +88,9 @@ const AdminPanel = ({
     birthDate, setBirthDate,
     gender, setGender,
     relation, setRelation,
-    parentName, setParentName,
-    parentGender, setParentGender,
     handlePictureUpload,
     onSubmit,
     onCancelEdit,
-    onAddParent,
     facebookUrl, setFacebookUrl,
     profilePicture, setProfilePicture
   } = useAdminPanel({
@@ -104,11 +100,9 @@ const AdminPanel = ({
     handleUpdateMember: handleUpdateMemberWrapper,
     selectedParent,
     selectedNodeId,
-    handleAddParent,
     setEditingId
   });
 
-  const selectedNode = familyData.find(n => n.id === selectedNodeId);
   const referenceNode = familyData.find(n => n.id === selectedParent);
 
   const renderInput = (field) => {
