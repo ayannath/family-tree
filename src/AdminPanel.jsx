@@ -103,6 +103,7 @@ const AdminPanel = ({
     setEditingId
   });
 
+  const selectedNode = familyData.find(n => n.id === selectedNodeId);
   const referenceNode = familyData.find(n => n.id === selectedParent);
 
   const renderInput = (field) => {
@@ -114,8 +115,7 @@ const AdminPanel = ({
         <div key={field.id} style={{ marginBottom: '10px' }}>
           <button 
             onClick={() => setShowDeathDate(true)} 
-            style={{ 
-              width: '100%',
+            style={{  
               padding: '6px',
               cursor: 'pointer',
               background: 'transparent',
@@ -153,7 +153,6 @@ const AdminPanel = ({
               onClick={() => setShowAnniversaryDate(true)} 
               style={{ 
                 width: '100%',
-                padding: '6px',
                 cursor: 'pointer',
                 background: 'transparent',
                 border: isDarkMode ? '1px dashed #555' : '1px dashed #999',
@@ -187,7 +186,7 @@ const AdminPanel = ({
     const style = { 
       padding: '8px', 
       backgroundColor: isDarkMode ? '#2d2d2d' : 'white', 
-      color: isDarkMode ? '#eee' : 'black', 
+      color: isDarkMode ? '#eee' : 'black',
       border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
       width: '100%',
       boxSizing: 'border-box'
@@ -223,59 +222,58 @@ const AdminPanel = ({
       );
     }
     
-    if (field.type === 'date') {
-      const isOptional = field.id === 'deathDate' || field.id === 'anniversaryDate';
+    if (field.id === 'facebookUrl') {
       return (
         <div key={field.id}>
           <label style={{ fontSize: '12px', color: isDarkMode ? '#ccc' : '#666', display: 'block', marginBottom: '5px' }}>{field.label}:</label>
-          <div style={{ display: 'flex', gap: '5px' }}>
-            <input type={field.type} placeholder={field.placeholder} value={value} onChange={e => set(e.target.value)} style={{ ...style, flex: 1 }} />
-            {isOptional && (
-              <button 
-                onClick={() => {
-                  if (field.id === 'deathDate') { setShowDeathDate(false); setDeathDate(''); }
-                  if (field.id === 'anniversaryDate') { setShowAnniversaryDate(false); setAnniversaryDate(''); }
-                }}
-                style={{ padding: '0 8px', cursor: 'pointer', background: 'transparent', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px' }}
-                title="Remove"
-              >
-                ✕
-              </button>
-            )}
+          <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+            <input 
+              type={field.type} 
+              placeholder={field.placeholder} 
+              value={value} 
+              onChange={e => set(e.target.value)} 
+              style={{...style, flex: 1}} 
+            />
+            <button 
+              onClick={() => window.open(value, '_blank', 'noopener,noreferrer')} 
+              disabled={!value}
+              style={{ padding: '8px', cursor: value ? 'pointer' : 'not-allowed', background: isDarkMode ? '#333' : '#eee', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px' }}
+              title="Open Facebook Profile"
+            >
+              🔗
+            </button>
           </div>
         </div>
       );
     }
     
-    if (field.id === 'facebookUrl') {
-      return (
-        <div key={field.id} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-          <input 
-            type={field.type} 
-            placeholder={field.placeholder} 
-            value={value} 
-            onChange={e => set(e.target.value)} 
-            style={{...style, flex: 1}} 
-          />
-          <button 
-            onClick={() => window.open(value, '_blank', 'noopener,noreferrer')} 
-            disabled={!value}
-            style={{ padding: '8px', cursor: value ? 'pointer' : 'not-allowed', background: isDarkMode ? '#333' : '#eee', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px' }}
-            title="Open Facebook Profile"
-          >
-            🔗
-          </button>
+    const isOptional = field.id === 'deathDate' || field.id === 'anniversaryDate';
+    return (
+      <div key={field.id}>
+        <label style={{ fontSize: '12px', color: isDarkMode ? '#ccc' : '#666', display: 'block', marginBottom: '5px' }}>{field.label}:</label>
+        <div style={{ display: 'flex', gap: '5px' }}>
+          <input type={field.type} placeholder={field.placeholder} value={value} onChange={e => set(e.target.value)} style={{ ...style, flex: 1 }} />
+          {isOptional && (
+            <button 
+              onClick={() => {
+                if (field.id === 'deathDate') { setShowDeathDate(false); setDeathDate(''); }
+                if (field.id === 'anniversaryDate') { setShowAnniversaryDate(false); setAnniversaryDate(''); }
+              }}
+              style={{ padding: '0 8px', cursor: 'pointer', background: 'transparent', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px' }}
+              title="Remove"
+            >
+              ✕
+            </button>
+          )}
         </div>
-      );
-    }
-    
-    return <input key={field.id} type={field.type} placeholder={field.placeholder} value={value} onChange={e => set(e.target.value)} style={style} />;
+      </div>
+    );
   };
 
   return (
     <div style={{ 
       position: 'absolute', 
-      top: 0, 
+      top: 0,
       right: 0, 
       width: '350px', 
       height: '100%', 
@@ -283,14 +281,13 @@ const AdminPanel = ({
       padding: '20px', 
       boxSizing: 'border-box', 
       borderLeft: isDarkMode ? '1px solid #333' : '1px solid #ddd', 
-      overflowY: 'auto', 
+      overflowY: 'auto',
       zIndex: 200,
       boxShadow: '-2px 0 10px rgba(0,0,0,0.1)'
     }}>
       <h3>Admin Panel</h3>
       
       <div style={{ marginBottom: '20px' }}>
-        <h4 style={{ marginTop: 0 }}>{editingId ? 'Edit Member' : 'Add Member'}</h4>
         <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {formConfig.map(field => renderInput(field))}
             

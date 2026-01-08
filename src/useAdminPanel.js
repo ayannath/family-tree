@@ -7,7 +7,6 @@ const useAdminPanel = ({
   handleUpdateMember,
   selectedParent,
   selectedNodeId,
-  handleAddParent,
   setEditingId
 }) => {
   // Unified state
@@ -18,9 +17,6 @@ const useAdminPanel = ({
   const [profilePicture, setProfilePicture] = useState(null);
   const [relation, setRelation] = useState('child');
   const [facebookUrl, setFacebookUrl] = useState('');
-
-  const [parentName, setParentName] = useState('');
-  const [parentGender, setParentGender] = useState('');
 
   useEffect(() => {
     if (editingId) {
@@ -80,17 +76,7 @@ const useAdminPanel = ({
     } else {
       const targetId = selectedParent ? Number(selectedParent) : null;
       
-      if (relation === 'parent' && targetId) {
-        handleAddParent(targetId, {
-          name,
-          gender,
-          notes,
-          birthDate,
-          profilePicture,
-          facebookUrl
-        });
-      } else {
-        let parentId = targetId;
+      let parentId = targetId;
         let partnerId = null;
 
         if (relation === 'spouse') {
@@ -112,7 +98,6 @@ const useAdminPanel = ({
           partnerId,
           facebookUrl
         });
-      }
       resetForm();
     }
   };
@@ -121,25 +106,15 @@ const useAdminPanel = ({
     setEditingId(null);
   };
 
-  const onAddParent = () => {
-    if (!parentName) return;
-    handleAddParent(selectedNodeId, { name: parentName, gender: parentGender });
-    setParentName('');
-    setParentGender('');
-  };
-
   return {
     name, setName,
     notes, setNotes,
     birthDate, setBirthDate,
     gender, setGender,
     relation, setRelation,
-    parentName, setParentName,
-    parentGender, setParentGender,
     handlePictureUpload,
     onSubmit,
     onCancelEdit,
-    onAddParent,
     facebookUrl, setFacebookUrl,
     profilePicture, setProfilePicture
   };

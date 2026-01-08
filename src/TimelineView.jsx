@@ -33,7 +33,7 @@ const TimelineView = ({ familyData, isDarkMode, secondaryIds }) => {
   // Render a message if no family data is available
   if (sortedData.length === 0) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', color: isDarkMode ? '#ccc' : '#666' }}>
+      <div className="timeline-empty">
         <h3>No family members found</h3>
         <p>Add family members in the Admin Panel to see the timeline.</p>
       </div>
@@ -42,37 +42,16 @@ const TimelineView = ({ familyData, isDarkMode, secondaryIds }) => {
 
   // Main timeline render
   return (
-    <div>
-      <div style={{ 
-        padding: '10px', 
-        textAlign: 'center', 
-        position: 'sticky', 
-        top: 0, 
-        zIndex: 10, 
-        backgroundColor: isDarkMode ? '#121212' : '#f8f9fa',
-        borderBottom: isDarkMode ? '1px solid #333' : '1px solid #ddd'
-      }}>
+    <div className={isDarkMode ? 'dark-mode' : ''}>
+      <div className="timeline-header">
         <button 
           onClick={() => setSortOrder('asc')}
-          style={{
-            padding: '6px 12px',
-            marginRight: '10px',
-            cursor: 'pointer',
-            backgroundColor: sortOrder === 'asc' ? '#2196F3' : 'transparent',
-            color: sortOrder === 'asc' ? 'white' : (isDarkMode ? '#eee' : 'black'),
-            border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
-            borderRadius: '4px'
-          }}>Oldest First (ASC)</button>
+          className={`sort-btn ${sortOrder === 'asc' ? 'active' : ''}`}
+        >Oldest First (ASC)</button>
         <button 
           onClick={() => setSortOrder('desc')}
-          style={{
-            padding: '6px 12px',
-            cursor: 'pointer',
-            backgroundColor: sortOrder === 'desc' ? '#2196F3' : 'transparent',
-            color: sortOrder === 'desc' ? 'white' : (isDarkMode ? '#eee' : 'black'),
-            border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
-            borderRadius: '4px'
-          }}>Newest First (DESC)</button>
+          className={`sort-btn ${sortOrder === 'desc' ? 'active' : ''}`}
+        >Newest First (DESC)</button>
       </div>
     <div className="timeline-container">
       {/* Central vertical line */}

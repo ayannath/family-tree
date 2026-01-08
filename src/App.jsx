@@ -7,16 +7,14 @@ import RadialTreeView from './RadialTreeView'
 import AdminPanel from './AdminPanel'
 import ContextMenu from './ContextMenu'
 import { initialFamilyData } from './initialData'
-import SearchOverlay from './SearchOverlay'
 import AuthPage from './AuthPage'
 import ProfilePage from './ProfilePage'
+import { familyService } from './familyService'
 
 function App() {
   // Initial flat data for the family tree
-  const [familyData, setFamilyData] = useState(() => {
-    const saved = localStorage.getItem('familyTreeData');
-    return saved ? JSON.parse(saved) : initialFamilyData;
-  });
+  const [familyData, setFamilyData] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedParent, setSelectedParent] = useState(() => {
@@ -57,6 +55,7 @@ function App() {
   const [isAllExpanded, setIsAllExpanded] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [globalSearchResults, setGlobalSearchResults] = useState([]);
 
   const addToHistory = useCallback(() => {
     setHistory(prev => [...prev, familyData]);
@@ -80,8 +79,26 @@ function App() {
   }, [redoStack, familyData]);
 
   useEffect(() => {
-    localStorage.setItem('familyTreeData', JSON.stringify(familyData));
-  }, [familyData]);
+    if (currentUser) {
+      setIsLoading(true);
+      familyService.getUserTree(currentUser.id).then(data => {
+        const loadedData = data || JSON.parse(JSON.stringify(initialFamilyData));
+        setFamilyData(loadedData);
+        if (loadedData && loadedData.length > 0) {
+          setSelectedNodeId(loadedData[0].id);
+          setSelectedParent(loadedData[0].id);
+        }
+        setIsLoading(false);
+      });
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    // Save to "DB" whenever familyData changes, but only if loaded
+    if (currentUser && !isLoading && familyData.length > 0) {
+      familyService.saveUserTree(currentUser.id, familyData);
+    }
+  }, [familyData, currentUser, isLoading]);
 
   useEffect(() => {
     localStorage.setItem('darkMode', isDarkMode);
@@ -101,6 +118,15 @@ function App() {
 
   useEffect(() => {
     hasCenteredRef.current = false;
+    
+    // Trigger global search if term is long enough
+    if (searchTerm.length > 2 && currentUser) {
+      familyService.searchGlobal(searchTerm, currentUser.id).then(results => {
+        setGlobalSearchResults(results);
+      });
+    } else {
+      setGlobalSearchResults([]);
+    }
   }, [searchTerm]);
 
   useEffect(() => {
@@ -677,7 +703,7 @@ function App() {
     const confirmationMessage = "WARNING: This will delete all your current family tree data and reset it to the default state. All your work will be lost.\n\nIt is highly recommended to export your data to a JSON file before proceeding.\n\nAre you sure you want to continue?";
     if (window.confirm(confirmationMessage)) {
       addToHistory();
-      setFamilyData(initialFamilyData);
+      setFamilyData(JSON.parse(JSON.stringify(initialFamilyData)));
     }
   };
 
@@ -766,6 +792,16 @@ function App() {
     }
   };
 
+  const handleDeleteUser = (userId) => {
+    // Remove user from users list
+    const users = JSON.parse(localStorage.getItem('family_tree_users') || '[]');
+    const updatedUsers = users.filter(u => u.id !== userId);
+    localStorage.setItem('family_tree_users', JSON.stringify(updatedUsers));
+
+    familyService.deleteUserTree(userId);
+    handleLogout();
+  };
+
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
@@ -778,76 +814,57 @@ function App() {
     return <AuthPage onLogin={handleLogin} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />;
   }
 
+  if (isLoading) {
+    return <div className={`loading-screen ${isDarkMode ? 'dark-mode' : ''}`}>Loading Family Tree...</div>;
+  }
+
   return (
-    <div className={`app-container ${isDarkMode ? 'dark-mode' : ''}`} style={{ height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'sans-serif', textAlign: 'left', backgroundColor: isDarkMode ? '#121212' : 'white', color: isDarkMode ? '#eee' : 'black' }}>
-      <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isDarkMode ? '1px solid #333' : '1px solid #eee', backgroundColor: isDarkMode ? '#1e1e1e' : '#fff', zIndex: 300, position: 'relative' }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem', cursor: 'pointer' }} onClick={handleTitleClick} title="Click to rename">
+    <div className={`app-container ${isDarkMode ? 'dark-mode' : ''}`}>
+      <div className="app-header">
+        <h1 className="header-title" onClick={handleTitleClick} title="Click to rename">
           {treeData.length === 1 ? (familyTitles[treeData[0].id] || `${treeData[0].name} Family Tree`) : (familyTitles['global'] || 'Family Tree Project')}
           <span style={{ fontSize: '0.8rem', marginLeft: '10px', opacity: 0.5 }}>✎</span>
         </h1>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <div style={{ position: 'relative', marginRight: '10px' }}>
-            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
+        <div className="header-controls">
+          <div className="search-container">
+            <span className="search-icon">🔍</span>
             <input
               type="text"
               placeholder="Search family..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              style={{
-                padding: '8px 8px 8px 30px',
-                borderRadius: '4px',
-                border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
-                backgroundColor: isDarkMode ? '#2d2d2d' : '#f0f2f5',
-                color: isDarkMode ? '#eee' : 'black',
-                outline: 'none',
-                width: '200px'
-              }}
+              className="search-input"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: isDarkMode ? '#aaa' : '#666', cursor: 'pointer' }}
+                className="clear-search-btn"
               >✕</button>
             )}
           </div>
 
-          <div style={{ position: 'relative' }}>
+          <div className="menu-container">
             <button 
               onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }} 
-              style={{ padding: '8px 16px', cursor: 'pointer', background: 'transparent', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}
+              className="menu-btn"
             >
               <span>☰</span> Menu
             </button>
             
             {isMenuOpen && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: '5px',
-                backgroundColor: isDarkMode ? '#2d2d2d' : 'white',
-                border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
-                borderRadius: '4px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                padding: '10px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '5px',
-                minWidth: '220px',
-                zIndex: 1000
-              }} onClick={(e) => e.stopPropagation()}>
-                <div style={{ padding: '8px', borderBottom: isDarkMode ? '1px solid #444' : '1px solid #eee', marginBottom: '5px', fontSize: '14px', color: isDarkMode ? '#eee' : 'black' }}>
+              <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                <div className="menu-header">
                   Signed in as <strong>{currentUser.name}</strong>
                 </div>
                 
-                <button onClick={() => { setShowProfile(true); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>👤 Profile</button>
-                <button onClick={() => { setViewMode(v => v === 'tree' ? 'timeline' : 'tree'); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>{viewMode === 'tree' ? '📅 Timeline View' : '🌳 Tree View'}</button>
-                <button onClick={() => { setLayout(l => l === 'horizontal' ? 'vertical' : l === 'vertical' ? 'radial' : 'horizontal'); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>{layout === 'horizontal' ? '↕ Vertical Layout' : layout === 'vertical' ? '◎ Radial Layout' : '↔ Horizontal Layout'}</button>
-                <button onClick={() => { setIsDarkMode(!isDarkMode); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>{isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
-                <button onClick={() => { setIsAdmin(!isAdmin); setIsMenuOpen(false); }} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: 'transparent', border: 'none', color: isDarkMode ? '#eee' : 'black', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>{isAdmin ? '🔒 Close Admin' : '🔓 Open Admin'}</button>
+                <button onClick={() => { setShowProfile(true); setIsMenuOpen(false); }} className="menu-item">👤 Profile</button>
+                <button onClick={() => { setViewMode(v => v === 'tree' ? 'timeline' : 'tree'); setIsMenuOpen(false); }} className="menu-item">{viewMode === 'tree' ? '📅 Timeline View' : '🌳 Tree View'}</button>
+                <button onClick={() => { setLayout(l => l === 'horizontal' ? 'vertical' : l === 'vertical' ? 'radial' : 'horizontal'); setIsMenuOpen(false); }} className="menu-item">{layout === 'horizontal' ? '↕ Vertical Layout' : layout === 'vertical' ? '◎ Radial Layout' : '↔ Horizontal Layout'}</button>
+                <button onClick={() => { setIsDarkMode(!isDarkMode); setIsMenuOpen(false); }} className="menu-item">{isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
+                <button onClick={() => { setIsAdmin(!isAdmin); setIsMenuOpen(false); }} className="menu-item">{isAdmin ? '🔒 Close Admin' : '🔓 Open Admin'}</button>
                 
-                <div style={{ borderTop: isDarkMode ? '1px solid #444' : '1px solid #eee', margin: '5px 0' }}></div>
-                <button onClick={handleLogout} style={{ textAlign: 'left', padding: '8px', cursor: 'pointer', background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>🚪 Logout</button>
+                <div className="menu-divider"></div>
+                <button onClick={handleLogout} className="menu-item logout-btn">🚪 Logout</button>
               </div>
             )}
           </div>
@@ -855,54 +872,61 @@ function App() {
       </div>
 
       {searchTerm && (
-        <div style={{
-          position: 'fixed',
-          top: '60px',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)',
-          backdropFilter: 'blur(4px)',
-          zIndex: 290,
-          overflowY: 'auto',
-          padding: '20px'
-        }} onClick={() => setSearchTerm('')}>
-          <div style={{ maxWidth: '600px', margin: '0 auto' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ color: isDarkMode ? '#eee' : '#333', textAlign: 'center' }}>Search Results ({searchResults.length})</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div className="search-overlay" onClick={() => setSearchTerm('')}>
+          <div className="search-results-content" onClick={e => e.stopPropagation()}>
+            <h3 className="search-results-title">Search Results ({searchResults.length})</h3>
+            
+            <div className="search-results-list">
               {searchResults.length > 0 ? searchResults.map(node => (
                 <div 
                   key={node.id}
                   onClick={() => { handleNodeSelect(node.id); setSearchTerm(''); }}
-                  style={{
-                    padding: '15px',
-                    backgroundColor: isDarkMode ? '#2d2d2d' : 'white',
-                    borderRadius: '8px',
-                    border: isDarkMode ? '1px solid #444' : '1px solid #ddd',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '15px',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-                  }}
+                  className="search-result-item"
                 >
                   {node.profilePicture ? (
-                    <img src={node.profilePicture} alt={node.name} style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover' }} />
+                    <img src={node.profilePicture} alt={node.name} className="search-result-avatar" />
                   ) : (
-                    <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: isDarkMode ? '#444' : '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>{node.gender === 'female' ? '👩' : '👨'}</div>
+                    <div className="search-result-placeholder">{node.gender === 'female' ? '👩' : '👨'}</div>
                   )}
                   <div>
-                    <div style={{ fontWeight: 'bold', fontSize: '1.1em', color: isDarkMode ? '#eee' : '#333' }}>{node.name} {node.deathDate && '🪦'}</div>
-                    <div style={{ fontSize: '0.9em', color: isDarkMode ? '#aaa' : '#666' }}>
+                    <div className="search-result-name">{node.name} {node.deathDate && '🪦'}</div>
+                    <div className="search-result-details">
                       {node.birthDate ? `Born: ${node.birthDate}` : 'No birth date'} 
                       {node.parentId ? '' : ' (Root Member)'}
                     </div>
                   </div>
                 </div>
-              )) : (
-                <div style={{ textAlign: 'center', padding: '20px', color: isDarkMode ? '#aaa' : '#666' }}>No members found matching "{searchTerm}"</div>
+              )) : null}
+              
+              {searchResults.length === 0 && globalSearchResults.length === 0 && (
+                <div className="timeline-empty">No members found matching "{searchTerm}"</div>
               )}
             </div>
+
+            {globalSearchResults.length > 0 && (
+              <>
+                <h3 className="global-results-divider">Results from Other Trees</h3>
+                <div className="search-results-list">
+                  {globalSearchResults.map((node, idx) => (
+                    <div 
+                      key={`global-${idx}`}
+                      className="global-result-item"
+                    >
+                      <div className="global-result-left">
+                        <div className="global-result-avatar">{node.gender === 'female' ? '👩' : '👨'}</div>
+                        <div>
+                          <div className="search-result-name">{node.name}</div>
+                          <div className="search-result-details">
+                            Tree Owner: <strong>{node.ownerName}</strong>
+                          </div>
+                        </div>
+                      </div>
+                      <button onClick={() => handleSuggestEdit(node, node.ownerName)} className="suggest-btn">Suggest Input</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -912,77 +936,78 @@ function App() {
           <ProfilePage 
             currentUser={currentUser} 
             onUpdateUser={handleUpdateUser} 
+            onDeleteUser={handleDeleteUser}
             onBack={() => setShowProfile(false)} 
             isDarkMode={isDarkMode} 
           />
         ) : (
         <>
         {viewMode === 'tree' && (
-        <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 100, width: '300px', display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
-          <div style={{ pointerEvents: 'auto' }}>
-          <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+        <div className="sidebar-controls">
+          <div className="sidebar-content">
+          <div className="sidebar-select-container">
             <select 
               value={filterType} 
               onChange={e => setFilterType(e.target.value)}
-              style={{ padding: '8px', flex: 1, borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black' }}
+              className="sidebar-select"
             >
               <option value="all">Show All Relationships</option>
               <option value="descendants">Show Direct Descendants</option>
             </select>
           </div>
           {filterType === 'descendants' && !selectedNodeId && (
-            <div style={{ padding: '8px', background: '#ff9800', color: 'white', borderRadius: '4px', fontSize: '14px' }}>
+            <div className="sidebar-info">
               Select a node to view descendants
             </div>
           )}
           {selectedNodeId && !targetNodeId && (
-            <div style={{ fontSize: '12px', color: isDarkMode ? '#aaa' : '#666', padding: '0 5px' }}>
+            <div className="sidebar-hint">
               Ctrl+Click another node to find shortest path
             </div>
           )}
           {selectedNodeId && (
-            <div style={{ marginTop: '5px', display: 'flex', gap: '5px' }}>
-              <button onClick={toggleExpandAll} style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>{isAllExpanded ? 'Collapse All' : 'Expand All'}</button>
-              <button onClick={handleClearSelection} style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Own Family</button>
+            <div className="toolbar-row">
+              <button onClick={toggleExpandAll} className="toolbar-btn">{isAllExpanded ? 'Collapse All' : 'Expand All'}</button>
+              <button onClick={handleClearSelection} className="toolbar-btn">Own Family</button>
             </div>
           )}
-          <div style={{ marginTop: '5px', display: 'flex', gap: '5px' }}>
+          <div className="toolbar-row">
             <button 
               onClick={handleUndo} 
               disabled={history.length === 0} 
               title="Undo"
-              style={{ flex: 1, padding: '6px', cursor: history.length === 0 ? 'not-allowed' : 'pointer', opacity: history.length === 0 ? 0.5 : 1, borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+              className="toolbar-btn"
             >
-              ↺
+              <span className="toolbar-btn-icon">↺</span>
             </button>
             <button 
               onClick={handleRedo} 
               disabled={redoStack.length === 0} 
               title="Redo"
-              style={{ flex: 1, padding: '6px', cursor: redoStack.length === 0 ? 'not-allowed' : 'pointer', opacity: redoStack.length === 0 ? 0.5 : 1, borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+              className="toolbar-btn"
             >
-              ↻
+              <span className="toolbar-btn-icon">↻</span>
             </button>
             <button 
               onClick={() => setViewState(s => ({ ...s, scale: s.scale + 0.1 }))} 
               title="Zoom In"
-              style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+              className="toolbar-btn"
             >
-              +
+              <span className="toolbar-btn-icon">+</span>
             </button>
             <button 
               onClick={() => setViewState(s => ({ ...s, scale: s.scale - 0.1 }))} 
               title="Zoom Out"
-              style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+              className="toolbar-btn"
             >
-              -
+              <span className="toolbar-btn-icon">-</span>
             </button>
             <button 
               onClick={() => setViewState({ scale: 1, x: 0, y: 0 })} 
               title="Reset View"
-              style={{ flex: 1, padding: '6px', cursor: 'pointer', borderRadius: '4px', border: isDarkMode ? '1px solid #555' : '1px solid #ccc', backgroundColor: isDarkMode ? '#2d2d2d' : 'white', color: isDarkMode ? '#eee' : 'black', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+              className="toolbar-btn"
             >
-              ⌖
+              <span className="toolbar-btn-icon">⌖</span>
             </button>
           </div>
           </div>
@@ -992,14 +1017,8 @@ function App() {
         {viewMode === 'tree' ? (
           <div 
             ref={containerRef}
-            style={{ 
-              width: '100%',
-              height: '100%', 
-              overflow: 'hidden', 
-              position: 'relative',
-              cursor: isDragging ? 'grabbing' : 'grab',
-              backgroundColor: isDarkMode ? '#121212' : '#f8f9fa'
-            }}
+            className="tree-view-container"
+            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -1022,7 +1041,7 @@ function App() {
           </div>
         </div>
         ) : (
-          <div style={{ width: '100%', height: '100%', overflow: 'auto', backgroundColor: isDarkMode ? '#121212' : '#f8f9fa' }}>
+          <div className="timeline-view-wrapper">
             <TimelineView familyData={timelineData} isDarkMode={isDarkMode} secondaryIds={fullTreeData.secondaryIds} />
           </div>
         )}

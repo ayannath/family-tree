@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const AuthPage = ({ onLogin, isDarkMode, setIsDarkMode }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -17,10 +17,164 @@ const AuthPage = ({ onLogin, isDarkMode, setIsDarkMode }) => {
   const [error, setError] = useState('');
   const [resetMessage, setResetMessage] = useState('');
 
+  useEffect(() => {
+    // Load Facebook SDK
+    window.fbAsyncInit = function() {
+      window.FB.init({
+        appId      : '2554761014938991', // Replace with your actual App ID
+        cookie     : true,
+        xfbml      : true,
+        version    : 'v19.0'
+      });
+    };
+
+    (function(d, s, id){
+       var js, fjs = d.getElementsByTagName(s)[0];
+       if (d.getElementById(id)) {return;}
+       js = d.createElement(s); js.id = id;
+       js.src = "https://connect.facebook.net/en_US/sdk.js";
+       fjs.parentNode.insertBefore(js, fjs);
+     }(document, 'script', 'facebook-jssdk'));
+  }, []);
+
+  const styles = {
+    container: {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh',
+      backgroundColor: isDarkMode ? '#121212' : '#f3f4f6',
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      transition: 'background-color 0.3s ease',
+    },
+    card: {
+      width: '100%',
+      maxWidth: '420px',
+      padding: '40px',
+      backgroundColor: isDarkMode ? '#1e1e1e' : '#ffffff',
+      borderRadius: '16px',
+      boxShadow: isDarkMode ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 25px 50px -12px rgba(0, 0, 0, 0.1)',
+      textAlign: 'center',
+    },
+    header: {
+      marginBottom: '32px',
+    },
+    title: {
+      fontSize: '28px',
+      fontWeight: '700',
+      color: isDarkMode ? '#ffffff' : '#111827',
+      marginBottom: '8px',
+    },
+    subtitle: {
+      fontSize: '14px',
+      color: isDarkMode ? '#9ca3af' : '#6b7280',
+    },
+    input: {
+      width: '100%',
+      padding: '12px 16px',
+      marginBottom: '16px',
+      borderRadius: '8px',
+      border: isDarkMode ? '1px solid #374151' : '1px solid #d1d5db',
+      backgroundColor: isDarkMode ? '#374151' : '#ffffff',
+      color: isDarkMode ? '#ffffff' : '#111827',
+      fontSize: '15px',
+      outline: 'none',
+      boxSizing: 'border-box',
+      transition: 'border-color 0.2s',
+    },
+    button: {
+      width: '100%',
+      padding: '12px',
+      backgroundColor: '#3b82f6',
+      color: '#ffffff',
+      border: 'none',
+      borderRadius: '8px',
+      fontSize: '16px',
+      fontWeight: '600',
+      cursor: 'pointer',
+      transition: 'background-color 0.2s',
+      marginTop: '8px',
+    },
+    link: {
+      color: '#3b82f6',
+      cursor: 'pointer',
+      fontWeight: '500',
+    },
+    socialButton: {
+      width: '100%',
+      padding: '12px',
+      backgroundColor: isDarkMode ? 'transparent' : '#ffffff',
+      color: isDarkMode ? '#ffffff' : '#111827',
+      border: isDarkMode ? '1px solid #374151' : '1px solid #d1d5db',
+      borderRadius: '8px',
+      fontSize: '15px',
+      fontWeight: '500',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '10px',
+      marginBottom: '12px',
+      transition: 'all 0.2s',
+    },
+    dividerContainer: {
+      display: 'flex',
+      alignItems: 'center',
+      margin: '24px 0',
+    },
+    dividerLine: {
+      flex: 1,
+      height: '1px',
+      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
+    },
+    dividerText: {
+      padding: '0 16px',
+      color: isDarkMode ? '#9ca3af' : '#6b7280',
+      fontSize: '14px',
+    }
+  };
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
     setResetMessage('');
+  };
+
+  const handleFacebookLogin = () => {
+    if (!window.FB) {
+      setError('Facebook SDK not loaded yet. Please check your internet connection.');
+      return;
+    }
+
+    window.FB.login((response) => {
+      if (response.status === 'connected') {
+        window.FB.api('/me', { fields: 'name,email,picture' }, (profile) => {
+          const users = JSON.parse(localStorage.getItem('family_tree_users') || '[]');
+          const fbId = 'fb_' + profile.id;
+          
+          // Try to find existing user by FB ID or Email
+          let user = users.find(u => u.id === fbId || (profile.email && u.email === profile.email));
+
+          if (!user) {
+            // Create new user from FB profile
+            user = {
+              id: fbId,
+              name: profile.name,
+              email: profile.email || '',
+              phone: '',
+              password: '', // No password for social login
+              profilePicture: profile.picture?.data?.url,
+              provider: 'facebook'
+            };
+            localStorage.setItem('family_tree_users', JSON.stringify([...users, user]));
+          }
+          
+          onLogin(user, true);
+        });
+      } else {
+        setError('Facebook login cancelled or failed.');
+      }
+    }, { scope: 'public_profile,email' });
   };
 
   const handleResetPassword = (e) => {
@@ -132,136 +286,108 @@ const AuthPage = ({ onLogin, isDarkMode, setIsDarkMode }) => {
     }
   };
 
-  const inputStyle = {
-    width: '100%',
-    padding: '10px',
-    marginBottom: '10px',
-    borderRadius: '4px',
-    border: isDarkMode ? '1px solid #555' : '1px solid #ccc',
-    backgroundColor: isDarkMode ? '#2d2d2d' : 'white',
-    color: isDarkMode ? '#eee' : 'black',
-    boxSizing: 'border-box'
-  };
-
-  const buttonStyle = {
-    width: '100%',
-    padding: '10px',
-    backgroundColor: '#2196F3',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    marginTop: '10px'
-  };
-
   return (
-    <div style={{ 
-      height: '100vh', 
-      display: 'flex', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
-      backgroundColor: isDarkMode ? '#121212' : '#f0f2f5',
-      color: isDarkMode ? '#eee' : 'black',
-      fontFamily: 'sans-serif'
-    }}>
-      <div style={{
-        width: '100%',
-        maxWidth: '400px',
-        padding: '30px',
-        backgroundColor: isDarkMode ? '#1e1e1e' : 'white',
-        borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-      }}>
-        <h2 style={{ textAlign: 'center', marginTop: 0 }}>{isForgotPassword ? 'Reset Password' : (isLogin ? 'Sign In' : 'Create Account')}</h2>
+    <div style={styles.container}>
+      <div style={styles.card}>
+        <div style={styles.header}>
+          <h2 style={styles.title}>
+            {isForgotPassword ? 'Reset Password' : (isLogin ? 'Welcome Back' : 'Create Account')}
+          </h2>
+          <p style={styles.subtitle}>
+            {isForgotPassword ? 'Enter your details to reset' : (isLogin ? 'Enter your credentials to access your account' : 'Start building your family tree today')}
+          </p>
+        </div>
         
         {error && (
-          <div style={{ 
-            backgroundColor: '#ffebee', 
-            color: '#c62828', 
-            padding: '10px', 
-            borderRadius: '4px', 
-            marginBottom: '15px',
-            fontSize: '14px'
-          }}>
+          <div style={{...styles.subtitle, color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '8px', marginBottom: '20px', textAlign: 'left'}}>
             {error}
           </div>
         )}
 
         {resetMessage && (
-          <div style={{ 
-            backgroundColor: '#e8f5e9', 
-            color: '#2e7d32', 
-            padding: '10px', 
-            borderRadius: '4px', 
-            marginBottom: '15px',
-            fontSize: '14px'
-          }}>
+          <div style={{...styles.subtitle, color: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '8px', marginBottom: '20px', textAlign: 'left'}}>
             {resetMessage}
           </div>
         )}
 
         <form onSubmit={isForgotPassword ? handleResetPassword : handleSubmit}>
-          {!isForgotPassword && !isLogin && <input type="text" name="name" placeholder="Full Name" value={formData.name} onChange={handleChange} style={inputStyle} />}
+          {!isForgotPassword && !isLogin && <input type="text" name="name" placeholder="Full Name" value={formData.name} onChange={handleChange} style={styles.input} />}
           
           {/* Email Input: Hide during reset password step */}
           {(!isForgotPassword || resetStep === 0) && (
-            <input type="text" name="email" placeholder={isForgotPassword ? "Enter your email" : (isLogin ? "Email or Phone" : "Email Address")} value={formData.email} onChange={handleChange} style={inputStyle} />
+            <input type="text" name="email" placeholder={isForgotPassword ? "Enter your email" : (isLogin ? "Email or Phone" : "Email Address")} value={formData.email} onChange={handleChange} style={styles.input} />
           )}
           
-          {!isForgotPassword && !isLogin && <input type="tel" name="phone" placeholder="Phone Number" value={formData.phone} onChange={handleChange} style={inputStyle} />}
+          {!isForgotPassword && !isLogin && <input type="tel" name="phone" placeholder="Phone Number" value={formData.phone} onChange={handleChange} style={styles.input} />}
           
           {isForgotPassword && resetStep === 1 && (
             <input 
               type="text" 
               placeholder="Enter Verification Code" 
               value={otp} 
-              onChange={(e) => { setOtp(e.target.value); setError(''); }} 
-              style={inputStyle} 
+              onChange={(e) => { setOtp(e.target.value); setError(''); }}
+              style={styles.input} 
             />
           )}
 
           {/* Password Inputs: Show for Login, Register, or Reset Step 2 */}
           {(!isForgotPassword || resetStep === 2) && (
-            <input type="password" name="password" placeholder={resetStep === 2 ? "New Password" : "Password"} value={formData.password} onChange={handleChange} style={inputStyle} />
+            <input type="password" name="password" placeholder={resetStep === 2 ? "New Password" : "Password"} value={formData.password} onChange={handleChange} style={styles.input} />
           )}
           {((!isForgotPassword && !isLogin) || (isForgotPassword && resetStep === 2)) && (
-            <input type="password" name="confirmPassword" placeholder="Confirm Password" value={formData.confirmPassword} onChange={handleChange} style={inputStyle} />
+            <input type="password" name="confirmPassword" placeholder="Confirm Password" value={formData.confirmPassword} onChange={handleChange} style={styles.input} />
           )}
 
           {!isForgotPassword && isLogin && (
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px', fontSize: '14px' }}>
+            <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px'}}>
               <input 
                 type="checkbox" 
                 id="rememberMe" 
                 checked={rememberMe} 
                 onChange={(e) => setRememberMe(e.target.checked)}
-                style={{ marginRight: '8px', cursor: 'pointer' }} 
+                style={{marginRight: '8px', width: '16px', height: '16px', cursor: 'pointer'}} 
               />
-              <label htmlFor="rememberMe" style={{ cursor: 'pointer' }}>Remember Me</label>
+              <label htmlFor="rememberMe" style={{fontSize: '14px', color: isDarkMode ? '#d1d5db' : '#4b5563', cursor: 'pointer'}}>Remember Me</label>
             </div>
           )}
 
-          <button type="submit" style={buttonStyle}>{isForgotPassword ? (resetStep === 2 ? 'Reset Password' : (resetStep === 1 ? 'Verify Code' : 'Send Reset Link')) : (isLogin ? 'Sign In' : 'Register')}</button>
+          <button type="submit" style={styles.button}>{isForgotPassword ? (resetStep === 2 ? 'Reset Password' : (resetStep === 1 ? 'Verify Code' : 'Send Reset Link')) : (isLogin ? 'Sign In' : 'Register')}</button>
         </form>
 
         {!isForgotPassword && isLogin && (
-          <div style={{ textAlign: 'right', marginTop: '10px' }}>
-            <span onClick={() => { setIsForgotPassword(true); setError(''); setResetMessage(''); setResetStep(0); setOtp(''); }} style={{ color: '#2196F3', cursor: 'pointer', fontSize: '14px' }}>
+          <div style={{ textAlign: 'center', marginTop: '20px' }}>
+            <span onClick={() => { setIsForgotPassword(true); setError(''); setResetMessage(''); setResetStep(0); setOtp(''); }} style={{...styles.link, fontSize: '14px'}}>
               Forgot Password?
             </span>
           </div>
         )}
 
-        <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '14px' }}>
+        {!isForgotPassword && (
+          <>
+            <div style={styles.dividerContainer}>
+              <div style={styles.dividerLine}></div>
+              <span style={styles.dividerText}>Or continue with</span>
+              <div style={styles.dividerLine}></div>
+            </div>
+
+            <button type="button" style={styles.socialButton} onClick={() => alert('Google login not implemented')}>
+              <span style={{ fontWeight: 'bold', color: '#EA4335', fontSize: '18px' }}>G</span> Google
+            </button>
+            <button type="button" style={styles.socialButton} onClick={handleFacebookLogin}>
+              <span style={{ fontWeight: 'bold', color: '#1877F2', fontSize: '18px' }}>f</span> Facebook
+            </button>
+          </>
+        )}
+
+        <div style={{marginTop: '30px', fontSize: '14px', color: isDarkMode ? '#9ca3af' : '#6b7280'}}>
           {isForgotPassword ? (
-            <span onClick={() => { setIsForgotPassword(false); setError(''); setResetMessage(''); setResetStep(0); setOtp(''); }} style={{ color: '#2196F3', cursor: 'pointer', fontWeight: 'bold' }}>
+            <span onClick={() => { setIsForgotPassword(false); setError(''); setResetMessage(''); setResetStep(0); setOtp(''); }} style={styles.link}>
               Back to Sign In
             </span>
           ) : (
             <>
               {isLogin ? "Don't have an account? " : "Already have an account? "}
-              <span onClick={() => { setIsLogin(!isLogin); setError(''); setFormData({ name: '', email: '', phone: '', password: '', confirmPassword: '' }); }} style={{ color: '#2196F3', cursor: 'pointer', fontWeight: 'bold' }}>
+              <span onClick={() => { setIsLogin(!isLogin); setError(''); setFormData({ name: '', email: '', phone: '', password: '', confirmPassword: '' }); }} style={styles.link}>
                 {isLogin ? 'Register' : 'Sign In'}
               </span>
             </>
