@@ -1,0 +1,83 @@
+import { useMemo } from 'react';
+import { calculateAge } from './helpers';
+
+const calculateLifeDuration = (birthDate, deathDate) => {
+  if (!birthDate) return '';
+  const start = new Date(birthDate);
+  const end = deathDate ? new Date(deathDate) : new Date();
+  let age = end.getFullYear() - start.getFullYear();
+  const m = end.getMonth() - start.getMonth();
+  if (m < 0 || (m === 0 && end.getDate() < start.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+// Component to display family members in a chronological timeline based on birth date
+const TimelineView = ({ familyData, isDarkMode }) => {
+  // Sort family members by birth date, filtering out those without one
+  const sortedData = useMemo(() => {
+    return [...familyData]
+      .filter(m => m.birthDate)
+      .sort((a, b) => new Date(a.birthDate) - new Date(b.birthDate));
+  }, [familyData]);
+
+  // Render a message if no birth dates are available
+  if (sortedData.length === 0) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: isDarkMode ? '#ccc' : '#666' }}>
+        <h3>No birth dates recorded</h3>
+        <p>Add birth dates to family members in the Admin Panel to see the timeline.</p>
+      </div>
+    );
+  }
+
+  // Main timeline render
+  return (
+    <div className="timeline-container">
+      {/* Central vertical line */}
+      <div className="timeline-line"></div>
+      
+      {/* Map through sorted members to create timeline items */}
+      {sortedData.map((member, index) => (
+        <div key={member.id} className="timeline-item">
+          {/* Birth date marker on the timeline */}
+          <div className="timeline-year">{member.birthDate}</div>
+          
+          {/* Content card for the family member */}
+          <div className="timeline-content">
+            {/* Profile picture if available */}
+            {member.profilePicture && (
+               <img 
+                 src={member.profilePicture} 
+                 alt={member.name} 
+                 style={{ 
+                   width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover', 
+                   display: 'inline-block', verticalAlign: 'middle', marginBottom: '10px', 
+                   float: index % 2 === 0 ? 'left' : 'right', 
+                   marginRight: index % 2 === 0 ? '15px' : '0', 
+                   marginLeft: index % 2 !== 0 ? '15px' : '0' 
+                 }} 
+               />
+            )}
+            
+            {/* Member details: Name, Age, Notes */}
+            <div style={{ overflow: 'hidden' }}>
+                <strong style={{ display: 'block', fontSize: '1.1em' }}>
+                  {member.name} {member.deathDate && '🪦'}
+                  {member.birthDate && (
+                    <span style={{ fontSize: '0.8em', fontWeight: 'normal', marginLeft: '5px', color: isDarkMode ? '#ccc' : '#666' }}>
+                      ({member.deathDate ? 'Died at' : 'Age'}: {calculateLifeDuration(member.birthDate, member.deathDate)})
+                    </span>
+                  )}
+                </strong>
+                {member.notes && <div style={{ fontSize: '0.9em', color: isDarkMode ? '#ccc' : '#666', marginTop: '5px' }}>{member.notes}</div>}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default TimelineView;

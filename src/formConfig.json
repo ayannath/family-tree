@@ -1,0 +1,64 @@
+[
+  {
+    "id": "name",
+    "label": "Name",
+    "type": "text",
+    "placeholder": "Name"
+  },
+  {
+    "id": "relation",
+    "label": "Member Relation",
+    "type": "select",
+    "options": [
+      { "value": "child", "label": "Child" },
+      { "value": "spouse", "label": "Spouse" },
+      { "value": "sibling", "label": "Sibling" },
+      { "value": "parent", "label": "Parent" }
+    ]
+  },
+  {
+    "id": "gender",
+    "label": "Gender",
+    "type": "select",
+    "options": [
+      { "value": "", "label": "Select Gender" },
+      { "value": "male", "label": "Male" },
+      { "value": "female", "label": "Female" }
+    ]
+  },
+  {
+    "id": "birthDate",
+    "label": "Date of Birth",
+    "type": "date",
+    "placeholder": "dd-mm-yyyy"
+  },
+  {
+    "id": "anniversaryDate",
+    "label": "Anniversary",
+    "type": "date",
+    "placeholder": "dd-mm-yyyy"
+  },
+  {
+    "id": "deathDate",
+    "label": "Death Date",
+    "type": "date",
+    "placeholder": "dd-mm-yyyy"
+  },
+  {
+    "id": "notes",
+    "label": "Notes",
+    "type": "textarea",
+    "placeholder": "Notes"
+  },
+  {
+    "id": "facebookUrl",
+    "label": "Facebook URL",
+    "type": "text",
+    "placeholder": "https://www.facebook.com/..."
+  },
+  {
+    "id": "profilePicture",
+    "label": "Profile Picture",
+    "type": "file"
+  }
+]
